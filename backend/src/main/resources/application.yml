@@ -1,0 +1,15 @@
+server:
+  port: ${PORT:8087}
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5433/atoms}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:kiit}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+weather:
+  api-key: ${OPENWEATHER_API_KEY:}
+  base-url: https://api.openweathermap.org
