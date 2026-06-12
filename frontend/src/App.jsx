@@ -10,6 +10,7 @@ import {
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { MapContainer, TileLayer } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import WeatherEffects from './WeatherEffects'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8087/api'
 const WeatherContext = createContext()
@@ -31,7 +32,6 @@ function Provider({ children }) {
   const [error, setError] = useState('')
   const [favorites, setFavorites] = useState([])
   const [history, setHistory] = useState([])
-  const [manualTheme, setManualTheme] = useState(localStorage.getItem('atmos-theme') || 'auto')
   const [locating, setLocating] = useState(false)
   const [locationMessage, setLocationMessage] = useState('')
 
@@ -90,15 +90,15 @@ function Provider({ children }) {
     // The initial city is intentionally captured once; later refreshes use persisted state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  const isNight = manualTheme === 'dark' || (manualTheme === 'auto' && data && !data.current.day)
-  const condition = isNight ? 'night' : data?.current.condition?.toLowerCase() || 'sunny'
+  const isNight = data ? !data.current.day : false
+  const condition = data?.current.condition?.toLowerCase() || 'sunny'
 
   const addFavorite = async () => {
     if (!data || favorites.some(f => f.city === data.current.city)) return
     await axios.post(`${API}/favorites`, { city: data.current.city, country: data.current.country }); fetchPlaces()
   }
-  return <WeatherContext.Provider value={{ city, data, loading, error, favorites, history, load, locateMe, locating, locationMessage, fetchPlaces, addFavorite, manualTheme, setManualTheme }}>
-    <div className={`app-shell weather-${condition} ${isNight ? 'night' : ''}`}><div className="ambient-sky"><i /><i /><i /></div>{children}</div>
+  return <WeatherContext.Provider value={{ city, data, loading, error, favorites, history, load, locateMe, locating, locationMessage, fetchPlaces, addFavorite }}>
+    <div className={`app-shell weather-${condition} ${isNight ? 'night' : ''}`}><WeatherEffects condition={condition} isNight={isNight} />{children}</div>
   </WeatherContext.Provider>
 }
 
@@ -131,10 +131,9 @@ function SearchBox() {
 }
 
 function Header({ toggleMenu }) {
-  const { data, manualTheme, setManualTheme, locateMe, locating } = useWeather()
+  const { data, locateMe, locating } = useWeather()
   return <header><button className="menu-btn" onClick={toggleMenu}><Menu /></button><SearchBox />
     <div className="header-actions"><button className={`icon-btn locate ${locating ? 'is-locating' : ''}`} onClick={() => locateMe(false)} title="Use precise current location"><LocateFixed size={18} /></button>
-      <button className="theme-toggle" onClick={() => { const t = manualTheme === 'dark' ? 'light' : 'dark'; setManualTheme(t); localStorage.setItem('atmos-theme', t) }}>{manualTheme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}<span>{manualTheme === 'dark' ? 'Light' : 'Dark'}</span></button>
       <div className="current-place"><span><MapPin size={15} /></span><div><b>{data?.current.city || 'Locating...'}</b><small>{data?.current.country || 'Your weather'}</small></div></div></div>
   </header>
 }
@@ -173,7 +172,7 @@ const metrics = [
 function Highlights() {
   const { data } = useWeather()
   return <section><SectionTitle eyebrow="TODAY AT A GLANCE" title="Weather highlights" link="/forecast" />
-    <div className="metric-grid">{metrics.map(([key, label, Icon, unit, note], i) => <motion.article className="metric-card glass" key={key} whileHover={{ y: -5 }} transition={{ type: 'spring', stiffness: 300 }}>
+    <div className="metric-grid">{metrics.map(([key, label, Icon, unit, note], i) => <motion.article className="metric-card glass" key={key} whileHover={{ scale: 1.03, y: -4 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}>
       <div className={`metric-icon tint-${i}`}><Icon size={20} /></div><span>{label}</span><strong>{data.current[key]}<small>{unit}</small></strong><div className="meter"><i style={{ width: `${Math.min(100, Number(data.current[key]) * (key === 'pressure' ? .075 : key === 'windSpeed' ? 8 : key === 'visibility' ? 8 : 1))}%` }} /></div><small>{note}</small>
     </motion.article>)}</div></section>
 }
@@ -186,13 +185,13 @@ function SectionTitle({ eyebrow, title, link }) {
 function Hourly({ full = false }) {
   const { data } = useWeather()
   return <section><SectionTitle eyebrow="NEXT 24 HOURS" title="Hourly forecast" />
-    <div className={`hourly glass ${full ? 'full' : ''}`}>{data.hourly.map((h, i) => <motion.div className={`hour ${i === 0 ? 'active' : ''}`} key={h.time} whileHover={{ y: -4 }}><span>{h.time}</span><WeatherIcon type={h.icon} size={28} /><strong>{h.temperature}°</strong><small><Droplets size={12} />{h.rainProbability}%</small></motion.div>)}</div></section>
+    <div className={`hourly glass ${full ? 'full' : ''}`}>{data.hourly.map((h, i) => <motion.div className={`hour ${i === 0 ? 'active' : ''}`} key={h.time} whileHover={{ scale: 1.05, y: -4 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}><span>{h.time}</span><WeatherIcon type={h.icon} size={28} /><strong>{h.temperature}°</strong><small><Droplets size={12} />{h.rainProbability}%</small></motion.div>)}</div></section>
 }
 
 function Weekly({ compact = false }) {
   const { data } = useWeather()
   return <section className={compact ? 'weekly-side' : ''}><SectionTitle eyebrow="WEEK AHEAD" title="7-day forecast" />
-    <div className="weekly glass">{data.weekly.map((d, i) => <motion.div className="day-row" key={d.date} whileHover={{ x: 4 }}><b>{d.day}<small>{new Date(d.date + 'T00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' })}</small></b><WeatherIcon type={d.icon} size={25} /><span>{d.condition}</span><div className="rain"><Droplets size={13} />{d.humidity}%</div><div className="temp-range"><b>{d.max}°</b><i><em style={{ left: `${i * 4}%`, right: `${20 - i * 2}%` }} /></i><small>{d.min}°</small></div></motion.div>)}</div></section>
+    <div className="weekly glass">{data.weekly.map((d, i) => <motion.div className="day-row" key={d.date} whileHover={{ scale: 1.02, x: 5 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}><b>{d.day}<small>{new Date(d.date + 'T00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' })}</small></b><WeatherIcon type={d.icon} size={25} /><span>{d.condition}</span><div className="rain"><Droplets size={13} />{d.humidity}%</div><div className="temp-range"><b>{d.max}°</b><i><em style={{ left: `${i * 4}%`, right: `${20 - i * 2}%` }} /></i><small>{d.min}°</small></div></motion.div>)}</div></section>
 }
 
 function Overview() {
@@ -209,7 +208,7 @@ function AirCard() {
 function AirQuality() {
   const { data } = useWeather(); const a = data.airQuality; const pollutants = [['PM2.5', a.pm25, 'Fine particles'], ['PM10', a.pm10, 'Coarse particles'], ['CO', a.co, 'Carbon monoxide'], ['NO₂', a.no2, 'Nitrogen dioxide'], ['O₃', a.o3, 'Ground ozone']]
   return <><PageHeading title="Air quality" text={`The air in ${data.current.city} is looking beautifully clear.`} icon={AirVent} /><div className="aq-hero glass"><div className="big-aq"><div>{a.aqi}</div><span>US AQI</span></div><div><span className="good-tag">HEALTHY AIR</span><h2>Go outside and breathe deeply.</h2><p>Air pollution poses little or no risk today. Conditions are ideal for everyone.</p></div><AirVent size={100} /></div>
-    <SectionTitle eyebrow="LIVE READINGS" title="Pollutant breakdown" /><div className="pollutant-grid">{pollutants.map((p, i) => <motion.div className="pollutant glass" key={p[0]} whileHover={{ y: -5 }}><span>{p[0]}</span><strong>{p[1]}<small>{i === 2 ? ' μg/m³' : ' μg/m³'}</small></strong><div className="meter"><i style={{ width: `${Math.min(95, p[1] / (i === 2 ? 4 : 1))}%` }} /></div><small>{p[2]}</small></motion.div>)}</div></>
+    <SectionTitle eyebrow="LIVE READINGS" title="Pollutant breakdown" /><div className="pollutant-grid">{pollutants.map((p, i) => <motion.div className="pollutant glass" key={p[0]} whileHover={{ scale: 1.04, y: -5 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}><span>{p[0]}</span><strong>{p[1]}<small>{i === 2 ? ' μg/m³' : ' μg/m³'}</small></strong><div className="meter"><i style={{ width: `${Math.min(95, p[1] / (i === 2 ? 4 : 1))}%` }} /></div><small>{p[2]}</small></motion.div>)}</div></>
 }
 
 function Charts() {
@@ -221,13 +220,13 @@ function ChartBase() { return <><CartesianGrid stroke="rgba(255,255,255,.08)" ve
 
 function Maps() {
   const { data } = useWeather(); const [layer, setLayer] = useState('temp_new')
-  return <><PageHeading title="Weather maps" text="Explore atmospheric patterns moving across the region." icon={Map} /><div className="map-shell glass"><div className="map-tabs">{[['temp_new','Temperature'],['precipitation_new','Rain'],['wind_new','Wind']].map(x => <button className={layer === x[0] ? 'active' : ''} onClick={() => setLayer(x[0])} key={x[0]}>{x[1]}</button>)}</div><MapContainer center={[data.current.latitude, data.current.longitude]} zoom={6} scrollWheelZoom className="map"><TileLayer attribution="© OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" /><TileLayer opacity={.55} url={`https://tile.openweathermap.org/map/${layer}/{z}/{x}/{y}.png?appid=${import.meta.env.VITE_OPENWEATHER_API_KEY || ''}`} /></MapContainer><div className="map-legend"><span>Low</span><i></i><span>High</span></div></div></>
+  return <><PageHeading title="Weather maps" text="Explore atmospheric patterns moving across the region." icon={Map} /><div className="map-shell glass"><div className="map-tabs">{[['temp_new','Temperature'],['precipitation_new','Rain'],['wind_new','Wind']].map(x => <button className={layer === x[0] ? 'active' : ''} onClick={() => setLayer(x[0])} key={x[0]}>{x[1]}</button>)}</div><MapContainer key={`${data.current.latitude}-${data.current.longitude}`} center={[data.current.latitude, data.current.longitude]} zoom={6} scrollWheelZoom className="map"><TileLayer attribution="© OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" /><TileLayer key={layer} opacity={.55} url={`https://tile.openweathermap.org/map/${layer}/{z}/{x}/{y}.png?appid=${import.meta.env.VITE_OPENWEATHER_API_KEY || ''}`} /></MapContainer><div className="map-legend"><span>Low</span><i></i><span>High</span></div></div></>
 }
 
 function Favorites() {
   const { favorites, load, fetchPlaces } = useWeather()
   const remove = async id => { await axios.delete(`${API}/favorites/${id}`); fetchPlaces() }
-  return <><PageHeading title="Favorite cities" text="Your personal collection of skies around the world." icon={Heart} />{favorites.length ? <div className="place-grid">{favorites.map((f, i) => <motion.div className="place-card glass" key={f.id} whileHover={{ y: -6 }} onClick={() => load(f.city)}><WeatherIcon type={i % 3 === 1 ? 'rain' : 'sun'} size={44}/><div><h3>{f.city}</h3><p>{f.country}</p></div><strong>{22 + i * 2}°</strong><button onClick={e => { e.stopPropagation(); remove(f.id) }}><Trash2 size={16}/></button></motion.div>)}</div> : <Empty icon={Heart} title="No favorite cities yet" text="Tap the heart on the overview to keep a city close." />}</>
+  return <><PageHeading title="Favorite cities" text="Your personal collection of skies around the world." icon={Heart} />{favorites.length ? <div className="place-grid">{favorites.map((f, i) => <motion.div className="place-card glass" key={f.id} whileHover={{ scale: 1.03, y: -5 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }} onClick={() => load(f.city)}><WeatherIcon type={i % 3 === 1 ? 'rain' : 'sun'} size={44}/><div><h3>{f.city}</h3><p>{f.country}</p></div><strong>{22 + i * 2}°</strong><button onClick={e => { e.stopPropagation(); remove(f.id) }}><Trash2 size={16}/></button></motion.div>)}</div> : <Empty icon={Heart} title="No favorite cities yet" text="Tap the heart on the overview to keep a city close." />}</>
 }
 
 function HistoryPage() {
